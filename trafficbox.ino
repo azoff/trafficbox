@@ -1,57 +1,48 @@
 /*
  * TrafficBox
  */
+
+#include <SPI.h>
+#include <Ethernet.h>
  
 // constants
 #define LIGHT_COUNT  3
-#define COMMAND_SIZE 2
+#define SERVER_PORT 80
+ 
+// define ethernet parameters
+byte mac[]     = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
+EthernetServer server(SERVER_PORT);
  
 // define light pins
-int lightPins[LIGHT_COUNT]      = {11, 12, 13};
+int lightPins[LIGHT_COUNT]      = {5, 6, 7};
 String lightLabels[LIGHT_COUNT] = {"red", "yellow", "green"};
  
-// define command buffer
-int commandIndex = 0;
-int commandBuffer[COMMAND_SIZE];
- 
-// program initialization
 void setup() {
    
-  // open serial port
   Serial.begin(9600);
-   
-  // set pins to output mode
+  Serial.println("Opening serial port @ 9600 baud...");
+  
+  Serial.println("Setting pin modes for output pins...");
   for (int i = 0; i < LIGHT_COUNT; i++)
-    pinMode(lightPins[i], OUTPUT);  
+    pinMode(lightPins[i], OUTPUT);    
+  
+  Serial.println("Initializing ethernet server...");
+  Ethernet.begin(mac);
+  server.begin();
+  Serial.print("Server Running: ");
+  Serial.print(Ethernet.localIP());
+  Serial.print(":");
+  Serial.println(SERVER_PORT);
      
 }
  
 // the main program loop
 void loop() {
-  if (commandIndex < COMMAND_SIZE) {
-    readInput();
-    commandIndex++;
-  } 
-  if (commandIndex >= COMMAND_SIZE) {
-    processCommand();
-    commandIndex = 0;    
+  EthernetClient client = server.available();
+  if (client == true) {
+    char out = client.read();
+    Serial.print(out);
   }
-}
-
-// reads input into the command buffer
-void readInput() {
-  while (Serial.available() <= 0);
-  commandBuffer[commandIndex] = Serial.read() - '0';
-}
-
-// runs the command currently in the buffer
-void processCommand() {
-  int lightIndex     = commandBuffer[0];
-  boolean lightLevel = commandBuffer[1] > 0;
-  if (lightIndex < LIGHT_COUNT)
-    toggleLight(lightIndex, lightLevel);
-  else
-    Serial.println("Invalid Command");
 }
 
 // toggles a light on and off
