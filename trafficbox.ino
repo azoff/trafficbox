@@ -12,6 +12,7 @@
 // define ethernet parameters
 byte mac[]     = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
 EthernetServer server(SERVER_PORT);
+EthernetClient client;
  
 // define light pins
 int lightPins[LIGHT_COUNT]      = {5, 6, 7};
@@ -38,11 +39,19 @@ void setup() {
  
 // the main program loop
 void loop() {
-  EthernetClient client = server.available();
-  if (client == true) {
-    char out = client.read();
-    Serial.print(out);
+  client = server.available();
+  if (client) {
+    String request = readRequest();
+    server.print(request);
   }
+}
+
+// reads the current request into a string
+String readRequest() {
+  String request = "";
+  while(client.available())
+    request += String((char)client.read());
+  return request;  
 }
 
 // toggles a light on and off
