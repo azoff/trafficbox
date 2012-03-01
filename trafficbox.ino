@@ -1,18 +1,19 @@
 /*
  * TrafficBox
  */
-
+ 
 #include <SPI.h>
 #include <Ethernet.h>
  
 // constants
 #define LIGHT_COUNT  3
-#define SERVER_PORT 80
+#define SERVER_PORT  80
+#define REQUEST_SIZE 40
  
 // define ethernet parameters
 byte mac[]     = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
 EthernetServer server(SERVER_PORT);
-EthernetClient client;
+String request[REQUEST_SIZE];
  
 // define light pins
 int lightPins[LIGHT_COUNT]      = {5, 6, 7};
@@ -38,20 +39,40 @@ void setup() {
 }
  
 // the main program loop
-void loop() {
-  client = server.available();
-  if (client) {
-    String request = readRequest();
-    server.print(request);
+void loop() {  
+  if (EthernetClient client = server.available()) {    
+    Serial.println("Client connected, reading request...");
+    int count = readRequest(client);
+    if (count > 2) {
+      writeResponse("200 OK", "text/plain", request[0] + " " + request[1]);
+    } else {
+      writeResponse("400 Bad Request", "text/plain", "Bad Request");
+    }
   }
+  delay(1000);
 }
 
-// reads the current request into a string
-String readRequest() {
-  String request = "";
-  while(client.available())
-    request += String((char)client.read());
-  return request;  
+// reads the current request into a string array
+int readRequest(EthernetClient client) {
+  int index = 0; char last, chunk;
+  while(client.available() && index < REQUEST_SIZE) {
+    chunk = client.read();
+    if (index < 2 && chunk == ' ' || index > 1 && (chunk == '\n' || chunk == ':')) {
+      if (last != chunk) 
+            request[index++].trim();
+    } else  request[index] += chunk;   
+    last = chunk;
+  }
+  return index > 0 ? (index+1) : 0; 
+}
+
+// writes a simple HTTP 1.0 response back to the client
+void writeResponse(String statusMessage, String contentType, String content) {
+  server.println("HTTP/1.0 "+statusMessage);
+  if (contentType.length() > 0)
+    server.println("Content-Type: " + contentType);
+  server.println("Content-Length: " + String(content.length()));
+  server.println("\n" + content);
 }
 
 // toggles a light on and off
