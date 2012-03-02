@@ -21,3 +21,4 @@ References
 - Web Server Example: <http://arduino.cc/playground/Code/WebServer>
 - Serving Files: <http://www.ladyada.net/learn/arduino/ethfiles.html>
 - OSX Internet Sharing <http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1254063613>
+- Dumping an SD card <http://arduino.cc/en/Tutorial/DumpFile>

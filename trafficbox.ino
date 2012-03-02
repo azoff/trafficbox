@@ -2,6 +2,7 @@
  * TrafficBox
  */
  
+#include <SD.h>
 #include <SPI.h>
 #include <Ethernet.h>
  
@@ -10,27 +11,39 @@
 #define SERVER_PORT  80
 #define REQUEST_SIZE 20
  
-// define ethernet parameters
+// ethernet
 byte mac[]     = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
 EthernetServer server(SERVER_PORT);
-String request[REQUEST_SIZE];
+String action = "", method = "";
  
-// define light pins
+// lights
 int lightPins[LIGHT_COUNT]      = {5, 6, 7};
 String lightLabels[LIGHT_COUNT] = {"red", "yellow", "green"};
+ 
+// sd card
+const int inputChipSelect  = 4;
+const int outputChipSelect = 10;
  
 void setup() {
    
   Serial.begin(9600);
-  Serial.println("Opening serial port @ 9600 baud...");
   
-  Serial.println("Setting pin modes for output pins...");
+  Serial.println("Initializing SD card...");
+  pinMode(outputChipSelect, OUTPUT);
+  if (!SD.begin(inputChipSelect)) {
+    Serial.println("ERROR: SD card is missing or invalid.");
+    return;
+  }
+  
+  Serial.println("Setting mode for light pins...");
   for (int i = 0; i < LIGHT_COUNT; i++)
-    pinMode(lightPins[i], OUTPUT);    
+    pinMode(lightPins[i], OUTPUT);
   
   Serial.println("Initializing ethernet server...");
-  Ethernet.begin(mac);
-  server.begin();
+  if (!Ethernet.begin(mac)) {
+    Serial.println("ERROR: Unable to assign IP Address.");
+    return;
+  } server.begin();
   Serial.print("Server Running: ");
   Serial.print(Ethernet.localIP());
   Serial.print(":");
@@ -41,35 +54,96 @@ void setup() {
 // the main program loop
 void loop() {  
   if (EthernetClient client = server.available()) {    
-    int count = readRequest(client);
-    if (count > 2) {
-      writeResponse("200 OK", "text/plain", request[0] + " " + request[1]);
+    readRequest(client);
+    if (method == "GET") {      
+      serveStaticFile();
     } else {
-      writeResponse("400 Bad Request", "text/plain", "Bad Request");
+      serveErrorMessage();
     }
-    closeResponse(client);
+    endRequest(client);
   }
 }
 
-void closeResponse(EthernetClient client) {
-  for (int i=0; i<REQUEST_SIZE; i++)
-    request[i] = "";
+// serves an error message for a bad request
+void serveErrorMessage() {
+  writeResponse("400 Bad Request", "text/plain", "Bad Request");
+}
+
+// attempts to server a static file from the SD card
+void serveStaticFile() {
+  String filepath    = inferPath(action); 
+  String content     = readFileContents(filepath);
+  if (content.length() > 0) {    
+    String contentType = inferContentType(filepath);
+    writeResponse("200 OK", contentType, content);
+  } else {
+    writeResponse("404 Not Found", "text/plain", filepath + " not found");
+  }
+}
+
+// infers the content type of a given file path
+String readFileContents(String path) {
+  int length = path.length()+1;
+  char c_path[length];
+  String contents = "";
+  path.toCharArray(c_path, length);
+  File staticFile = SD.open(c_path, FILE_READ);
+  if (staticFile) {
+    while (staticFile.available())
+      contents += (char) staticFile.read();
+    staticFile.close();
+  } 
+  return contents;
+}
+
+// infers the content type of a given file path
+String inferContentType(String path) {
+  String extension = path.substring(path.lastIndexOf('.')+1);
+  if (extension == "html") return "text/html";
+  if (extension == "js")   return "application/javascript";
+  if (extension == "css")  return "text/css";
+  if (extension == "ico")  return "image/vnd.microsoft.icon";
+  return "text/plain";
+}
+
+// infers the implicit path on HTML GET requests
+String inferPath(String path) {
+  String correctPath = path; 
+  correctPath.trim();
+  if (correctPath.lastIndexOf('.') < 0) {
+    if (!correctPath.endsWith("/"))
+      correctPath += '/';
+    correctPath += "index.html";
+  }
+  if (correctPath.startsWith("/")) {
+    correctPath = correctPath.substring(1);
+  }
+  return correctPath;
+}
+
+// resets the request to its original parameters
+void endRequest(EthernetClient client) {
+  action = ""; 
+  method = "";
   client.flush();
   client.stop();
 }
 
-// reads the current request into a string array
-int readRequest(EthernetClient client) {
-  int index = 0; char last, chunk;
+// parses the current request from the TCP stream
+void readRequest(EthernetClient client) {
+  int index = 0;   
+  char last, chunk;
   while(client.available() && index < REQUEST_SIZE) {
     chunk = client.read();
-    if (index < 2 && chunk == ' ' || index > 1 && (chunk == '\n' || chunk == ':')) {
-      if (last != chunk) 
-            request[index++].trim();
-    } else  request[index] += chunk;   
+    if (chunk == ' ' && last != chunk) index++;
+    else if (index == 0)  method += chunk;
+    else if (index == 1)  action += chunk;
+    else {
+      Serial.println(method + " " + action);
+      break;
+    }
     last = chunk;
   }
-  return index > 0 ? (index+1) : 0; 
 }
 
 // writes a simple HTTP 1.0 response back to the client
