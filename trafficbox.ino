@@ -8,7 +8,7 @@
 // constants
 #define LIGHT_COUNT  3
 #define SERVER_PORT  80
-#define REQUEST_SIZE 40
+#define REQUEST_SIZE 20
  
 // define ethernet parameters
 byte mac[]     = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
@@ -41,15 +41,21 @@ void setup() {
 // the main program loop
 void loop() {  
   if (EthernetClient client = server.available()) {    
-    Serial.println("Client connected, reading request...");
     int count = readRequest(client);
     if (count > 2) {
       writeResponse("200 OK", "text/plain", request[0] + " " + request[1]);
     } else {
       writeResponse("400 Bad Request", "text/plain", "Bad Request");
     }
+    closeResponse(client);
   }
-  delay(1000);
+}
+
+void closeResponse(EthernetClient client) {
+  for (int i=0; i<REQUEST_SIZE; i++)
+    request[i] = "";
+  client.flush();
+  client.stop();
 }
 
 // reads the current request into a string array
