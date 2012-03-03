@@ -7,18 +7,15 @@
 #include <Ethernet.h>
  
 // constants
-#define LIGHT_COUNT  3
-#define SERVER_PORT  80
-#define REQUEST_SIZE 20
+#define ETHERNET_SERVER_PORT 80
  
 // ethernet
-byte mac[]     = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
-EthernetServer server(SERVER_PORT);
-String action = "", method = "";
+byte mac[] = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
+EthernetServer server(ETHERNET_SERVER_PORT);
  
 // lights
-int lightPins[LIGHT_COUNT]      = {5, 6, 7};
-String lightLabels[LIGHT_COUNT] = {"red", "yellow", "green"};
+int lightPins[]            = { 5, 6, 7 };
+const String lightLabels[] = { "RED", "YELLOW", "GREEN" };
  
 // sd card
 const int inputChipSelect  = 4;
@@ -28,7 +25,7 @@ void setup() {
    
   Serial.begin(9600);
   
-  Serial.println("Initializing SD card...");
+  Serial.println("\nInitializing SD card...");
   pinMode(outputChipSelect, OUTPUT);
   if (!SD.begin(inputChipSelect)) {
     Serial.println("ERROR: SD card is missing or invalid.");
@@ -36,130 +33,129 @@ void setup() {
   }
   
   Serial.println("Setting mode for light pins...");
-  for (int i = 0; i < LIGHT_COUNT; i++)
+  for (int i=0; i<3; i++)
     pinMode(lightPins[i], OUTPUT);
   
   Serial.println("Initializing ethernet server...");
   if (!Ethernet.begin(mac)) {
     Serial.println("ERROR: Unable to assign IP Address.");
     return;
-  } server.begin();
+  } 
+  server.begin();
   Serial.print("Server Running: ");
   Serial.print(Ethernet.localIP());
   Serial.print(":");
-  Serial.println(SERVER_PORT);
+  Serial.println(ETHERNET_SERVER_PORT);
      
 }
  
 // the main program loop
 void loop() {  
-  if (EthernetClient client = server.available()) {    
-    readRequest(client);
-    if (method == "GET") {      
-      serveStaticFile();
-    } else {
-      serveErrorMessage();
-    }
-    endRequest(client);
+  if (EthernetClient client = server.available()) {
+    String method = readRequestPart(client);
+    String action = readRequestPart(client);
+    if (method.equalsIgnoreCase("GET"))
+      serveFileStream(action);
+    else if (method.equalsIgnoreCase("POST"))
+      toggleLight(action);
+    else
+      writeStatusLine(400, "Bad Request");
+    client.flush();
+    client.stop();    
   }
-}
-
-// serves an error message for a bad request
-void serveErrorMessage() {
-  writeResponse("400 Bad Request", "text/plain", "Bad Request");
-}
-
-// attempts to server a static file from the SD card
-void serveStaticFile() {
-  String filepath    = inferPath(action); 
-  String content     = readFileContents(filepath);
-  if (content.length() > 0) {    
-    String contentType = inferContentType(filepath);
-    writeResponse("200 OK", contentType, content);
-  } else {
-    writeResponse("404 Not Found", "text/plain", filepath + " not found");
-  }
-}
-
-// infers the content type of a given file path
-String readFileContents(String path) {
-  int length = path.length()+1;
-  char c_path[length];
-  String contents = "";
-  path.toCharArray(c_path, length);
-  File staticFile = SD.open(c_path, FILE_READ);
-  if (staticFile) {
-    while (staticFile.available())
-      contents += (char) staticFile.read();
-    staticFile.close();
-  } 
-  return contents;
-}
-
-// infers the content type of a given file path
-String inferContentType(String path) {
-  String extension = path.substring(path.lastIndexOf('.')+1);
-  if (extension == "html") return "text/html";
-  if (extension == "js")   return "application/javascript";
-  if (extension == "css")  return "text/css";
-  if (extension == "ico")  return "image/vnd.microsoft.icon";
-  return "text/plain";
-}
-
-// infers the implicit path on HTML GET requests
-String inferPath(String path) {
-  String correctPath = path; 
-  correctPath.trim();
-  if (correctPath.lastIndexOf('.') < 0) {
-    if (!correctPath.endsWith("/"))
-      correctPath += '/';
-    correctPath += "index.html";
-  }
-  if (correctPath.startsWith("/")) {
-    correctPath = correctPath.substring(1);
-  }
-  return correctPath;
-}
-
-// resets the request to its original parameters
-void endRequest(EthernetClient client) {
-  action = ""; 
-  method = "";
-  client.flush();
-  client.stop();
 }
 
 // parses the current request from the TCP stream
-void readRequest(EthernetClient client) {
-  int index = 0;   
-  char last, chunk;
-  while(client.available() && index < REQUEST_SIZE) {
+String readRequestPart(EthernetClient client) {
+  String part = ""; char chunk;
+  while (client.available()) {
     chunk = client.read();
-    if (chunk == ' ' && last != chunk) index++;
-    else if (index == 0)  method += chunk;
-    else if (index == 1)  action += chunk;
-    else {
-      Serial.println(method + " " + action);
-      break;
-    }
-    last = chunk;
+    if (isWhiteSpace(chunk)) break;
+    else part.concat(chunk);
+  }
+  return part;
+}
+
+// does what it says
+boolean isWhiteSpace(char toCheck) {
+  return (toCheck == ' ' || toCheck == '\n');
+}
+
+// attempts to server a static file from the SD card
+void serveFileStream(String filePath) {
+  const char *dos83Path = getDos83Path(filePath);
+  if (File fileStream = SD.open(dos83Path)) {
+    writeStatusLine(200, "OK");
+    writeContentType(filePath);
+    writeContentFile(fileStream);
+    fileStream.close();
+  } else {
+    writeStatusLine(404, "Not Found");
+  }  
+}
+
+const char *getDos83Path(String filePath) {  
+  if (filePath.equalsIgnoreCase("/") || filePath.equalsIgnoreCase("/index.html")) 
+    return ;
+  else if (filePath.equalsIgnoreCase("/rootdump.txt")) 
+    return "/";
+  else {
+    filePath.toUpperCase();
+    int length = filePath.length();
+    char dos83Path[length];
+    filePath.toCharArray(dos83Path, length);
+    return dos83Path;
   }
 }
 
-// writes a simple HTTP 1.0 response back to the client
-void writeResponse(String statusMessage, String contentType, String content) {
-  server.println("HTTP/1.0 "+statusMessage);
-  if (contentType.length() > 0)
-    server.println("Content-Type: " + contentType);
-  server.println("Content-Length: " + String(content.length()));
-  server.println("\n" + content);
+// write out an HTTP status line
+void writeStatusLine(int code, String message) {
+  server.print("HTTP/1.0 ");
+  server.print(code);
+  server.print(" ");
+  server.println(message);
+}
+
+// write out the content type of a particular file
+void writeContentType(String filePath) {
+  server.print("Content-Type: ");
+  String ext = filePath.substring(filePath.lastIndexOf('.')+1);    
+  if (ext.equalsIgnoreCase("js"))   server.println("application/javascript");
+  if (ext.equalsIgnoreCase("json")) server.println("application/json");
+  if (ext.equalsIgnoreCase("ico"))  server.println("image/vnd.microsoft.icon");
+  if (ext.equalsIgnoreCase("css"))  server.println("text/css");  
+  if (ext.equalsIgnoreCase("txt"))  server.println("text/plain");
+  else                              server.println("text/html");
+}
+
+// write out an HTTP content from a string
+void writeContentString(String content) { 
+  server.print("Content-Length: ");
+  server.println(content.length());
+  server.println();
+  server.println(content);
+}
+
+// write out an HTTP content from a string
+void writeContentFile(File content) { 
+  server.print("Content-Length: ");
+  server.println(content.available());
+  server.println();
+  while (content.available())
+    server.write((char) content.read());
 }
 
 // toggles a light on and off
-void toggleLight(int index, boolean level) {
-  Serial.print("switch ");
-  Serial.print(lightLabels[index]);
-  Serial.print(" light o");
-  Serial.println(level ? "n" : "ff");
-  digitalWrite(lightPins[index], level);
+void toggleLight(String command) {
+  int index = command.charAt(1) - '0';
+  int setter = command.charAt(2) - '0';
+  if (index < 3 && setter >=0) {
+    boolean level = setter > 0 ? HIGH : LOW;
+    digitalWrite(lightPins[index], level);
+    writeStatusLine(200, "OK");
+    writeContentType(".txt");
+    writeContentString(lightLabels[index] + (level ? " ON" : " OFF"));
+  } else {
+    writeStatusLine(400, "Bad Request");
+  }
 }
