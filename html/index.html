@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>TrafficBox Control Panel</title>
+        <link rel="stylesheet" href="/styles/normalize.css" />
+        <link rel="stylesheet" href="/styles/jquery.mobile-1.1.0-rc.1.min.css" />
+        <link rel="stylesheet" href="/styles/screen.css" />
+    </head>
+    <body>
+        <div data-theme="c" data-role="page">
+        	<div data-role="header">
+        		<h1>TrafficBox Control Panel</h1>
+        	</div>
+        	<div id="lights" data-role="content">	
+        		<label for="red">Red Light</label>
+                <select name="0" id="red" data-role="slider">
+                	<option value="0">Off</option>
+                	<option value="1">On</option>
+                </select>
+                <label for="yellow">Yellow Light</label>
+                <select name="1" id="yellow" data-role="slider">
+                	<option value="0">Off</option>
+                	<option value="1">On</option>
+                </select>
+                <label for="green">Green Light</label>
+                <select name="2" id="green" data-role="slider">
+                	<option value="0">Off</option>
+                	<option value="1">On</option>
+                </select>                               
+        	</div>
+        </div>
+        <script src="/scripts/jquery-1.7.1.min.js"></script>
+        <script src="/scripts/jquery.mobile-1.1.0-rc.1.min.js"></script>
+        <script src="/scripts/trafficbox.js"></script>
+    </body>
+</html>

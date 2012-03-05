@@ -4,14 +4,10 @@ An arduino-powered, network-controlled traffic-light server
 
 To Do
 ------
-- Transfer over SD to local comp
-- Create a local mobile microsite
-- Upload the microsite unto the SD card
-- Write code to handle UI mode (GET)
-- Write code to handle command mode (POST)
-- Delay consecutive commands by a second each
-- Insert SD card into arduino
-
+- Add favicon
+- Write content type handler for images
+- Write handler for status.txt
+- Test html directory on SD card, fix 8.3 mappings
 
 References
 ----------
