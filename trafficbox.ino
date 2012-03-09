@@ -3,130 +3,169 @@
  */
  
 #include <SD.h>
-#include <SPI.h>
 #include <Ethernet.h>
- 
-// constants
-#define ETHERNET_SERVER_PORT 80
+#include <SPI.h>
  
 // ethernet
 byte mac[] = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
-EthernetServer server(ETHERNET_SERVER_PORT);
+EthernetServer server(80);
  
 // lights
-int lightPins[]            = { 5, 6, 7 };
-const String lightLabels[] = { "RED", "YELLOW", "GREEN" };
+const int lightPins[] = { 5, 6, 7 };
  
-// sd card
-const int inputChipSelect  = 4;
-const int outputChipSelect = 10;
+/*************************
+ * ERROR LOGGING UTILITY *
+ *************************/
+ 
+#define error(s) error_P(PSTR(s))
+void error_P(const char* str) {
+  PgmPrint("ERROR: ");
+  SerialPrintln_P(str);
+  while(1);
+}
+ 
+/************************
+ * INITIALIZE LIBRARIES *
+ ************************/
  
 void setup() {
    
   Serial.begin(9600);
+
+  PgmPrint("\nFree RAM: ");
+  Serial.println(FreeRam());
+ 
+  for (int i=0; i<3; i++) pinMode(lightPins[i], OUTPUT);
+  pinMode(10, OUTPUT); digitalWrite(10, HIGH);
+  PgmPrintln("Pin modes set");
+   
+  SD.begin(4);
+  PgmPrintln("SD card initialized");
   
-  Serial.println("\nInitializing SD card...");
-  pinMode(outputChipSelect, OUTPUT);
-  if (!SD.begin(inputChipSelect)) {
-    Serial.println("ERROR: SD card is missing or invalid.");
-    return;
-  }
+  if (!Ethernet.begin(mac))
+    error("Unable to assign IP Address");
+  PgmPrint("DHCP assigned IP ");
+  Serial.println(Ethernet.localIP());
   
-  Serial.println("Setting mode for light pins...");
-  for (int i=0; i<3; i++)
-    pinMode(lightPins[i], OUTPUT);
-  
-  Serial.println("Initializing ethernet server...");
-  if (!Ethernet.begin(mac)) {
-    Serial.println("ERROR: Unable to assign IP Address.");
-    return;
-  } 
   server.begin();
-  Serial.print("Server Running: ");
-  Serial.print(Ethernet.localIP());
-  Serial.print(":");
-  Serial.println(ETHERNET_SERVER_PORT);
+  PgmPrintln("HTTP/1.1 via port 80");
      
 }
  
-// the main program loop
-void loop() {  
+/*********************
+ * MAIN PROGRAM LOOP *
+ *********************/
+ 
+void loop() {
+  char method[10], action[50];
   if (EthernetClient client = server.available()) {
-    String method = readRequestPart(client);
-    String action = readRequestPart(client);
-    if (method.equalsIgnoreCase("GET"))
+    readRequestLine(client, method, action);    
+    Serial.print(method); PgmPrint(" ");
+    Serial.println(action);
+    if (strcmp(method, "GET") == 0)
       serveFileStream(action);
-    else if (method.equalsIgnoreCase("POST"))
-      toggleLight(action);
     else
       writeStatusLine(400, "Bad Request");
-    client.flush();
+    delay(1000);
     client.stop();    
   }
 }
 
-// parses the current request from the TCP stream
-String readRequestPart(EthernetClient client) {
-  String part = ""; char chunk;
-  while (client.available()) {
-    chunk = client.read();
-    if (isWhiteSpace(chunk)) break;
-    else part.concat(chunk);
+/****************************
+ * READS HTTP REQUEST PARTS *
+ ****************************/
+ 
+void readRequestLine(EthernetClient client, char *method, char *action) {
+  int part=0,i=0,j=0; char chunk;
+  while (client.connected()) {
+    if (client.available()) {
+      chunk = client.read();
+      if (chunk == '\n' || chunk == ' ')
+        part++;
+      else if (part == 0)
+        method[i++] = chunk;
+      else if (part == 1)
+        action[j++] = chunk;
+      else break;
+    } else break;
   }
-  return part;
+  client.flush();
+  method[i] = action[j] = '\0';
 }
 
-// does what it says
-boolean isWhiteSpace(char toCheck) {
-  return (toCheck == ' ' || toCheck == '\n');
-}
-
-// attempts to server a static file from the SD card
-void serveFileStream(String filePath) {
-  const char *dos83Path = getDos83Path(filePath);
-  if (File fileStream = SD.open(dos83Path)) {
+/************************************************
+ * SERVES A FILE FROM THE SD CARD OVER ETHERNET *
+ ************************************************/
+ 
+void serveFileStream(char *action) {
+  char *dos83Path = getDos83Path(action);
+  PgmPrint("OPEN "); Serial.println(dos83Path);  
+  File fileStream = SD.open(dos83Path);
+  if(fileStream) {
     writeStatusLine(200, "OK");
-    writeContentType(filePath);
-    writeContentFile(fileStream);
-    fileStream.close();
+    writeContentType(action);
+    writeFileStream(fileStream);
   } else {
     writeStatusLine(404, "Not Found");
-  }  
-}
-
-const char *getDos83Path(String filePath) {  
-  if (filePath.equalsIgnoreCase("/") || filePath.equalsIgnoreCase("/index.html")) 
-    return ;
-  else if (filePath.equalsIgnoreCase("/rootdump.txt")) 
-    return "/";
-  else {
-    filePath.toUpperCase();
-    int length = filePath.length();
-    char dos83Path[length];
-    filePath.toCharArray(dos83Path, length);
-    return dos83Path;
   }
 }
 
-// write out an HTTP status line
-void writeStatusLine(int code, String message) {
+/************************************************
+ * PATH MAPPINGS FROM LONG TO SHORT (8.3) NAMES *
+ ************************************************/
+
+char *getDos83Path(char *path) {
+  if (strcmp("/", path) == 0)                                        return "INDEX~1.HTM";
+  if (strcmp("/styles/normalize.css", path) == 0)                    return "STYLES/NORMAL~1.CSS";
+  if (strcmp("/styles/jquery.mobile-1.1.0-rc.1.min.css", path) == 0) return "STYLES/JQUERY~1.CSS";
+  if (strcmp("/styles/screen.css", path) == 0)                       return "STYLES/SCREEN~1.CSS";
+  if (strcmp("/scripts/jquery-1.7.1.min.js", path) == 0)             return "SCRIPTS/JQUERY~1.JS";
+  if (strcmp("/scripts/jquery.mobile-1.1.0-rc.1.min.js", path) == 0) return "SCRIPTS/JQUERY~2.JS";
+  if (strcmp("/scripts/trafficbox.js", path) == 0)                   return "SCRIPTS/TRAFFI~1.JS";
+  if (strcmp("/images/ajax-loader.gif", path) == 0)                  return "IMAGES/AJAX-L~1.GIF";  
+  return "";
+}
+
+/********************
+ * HTTP STATUS LINE *
+ ********************/
+ 
+void writeStatusLine(int code, const char *message) {
   server.print("HTTP/1.0 ");
   server.print(code);
   server.print(" ");
   server.println(message);
 }
 
-// write out the content type of a particular file
-void writeContentType(String filePath) {
+/*********************
+ * HTTP CONTENT TYPE *
+ *********************/
+
+void writeContentType(char *path) {
   server.print("Content-Type: ");
-  String ext = filePath.substring(filePath.lastIndexOf('.')+1);    
-  if (ext.equalsIgnoreCase("js"))   server.println("application/javascript");
-  if (ext.equalsIgnoreCase("json")) server.println("application/json");
-  if (ext.equalsIgnoreCase("ico"))  server.println("image/vnd.microsoft.icon");
-  if (ext.equalsIgnoreCase("css"))  server.println("text/css");  
-  if (ext.equalsIgnoreCase("txt"))  server.println("text/plain");
-  else                              server.println("text/html");
+  if (strstr("js", path) != 0)   server.println("application/javascript");
+  if (strstr("json", path) != 0) server.println("application/json");
+  if (strstr("ico", path) != 0)  server.println("image/vnd.microsoft.icon");
+  if (strstr("gif", path) != 0)  server.println("image/gif");
+  if (strstr("css", path) != 0)  server.println("text/css");  
+  if (strstr("txt", path) != 0)  server.println("text/plain");
+  else                           server.println("text/html");
 }
+
+/*************************
+ * STREAM FILE OVER HTTP *
+ *************************/
+
+void writeFileStream(File fileStream) { 
+  server.print("Content-Length: ");
+  server.println(fileStream.available());
+  server.println();
+  while (fileStream.available())
+    server.write((char)fileStream.read());
+  fileStream.close();
+}
+
+/*
 
 // write out an HTTP content from a string
 void writeContentString(String content) { 
@@ -134,15 +173,6 @@ void writeContentString(String content) {
   server.println(content.length());
   server.println();
   server.println(content);
-}
-
-// write out an HTTP content from a string
-void writeContentFile(File content) { 
-  server.print("Content-Length: ");
-  server.println(content.available());
-  server.println();
-  while (content.available())
-    server.write((char) content.read());
 }
 
 // toggles a light on and off
@@ -158,4 +188,4 @@ void toggleLight(String command) {
   } else {
     writeStatusLine(400, "Bad Request");
   }
-}
+}*/
