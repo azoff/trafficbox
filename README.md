@@ -4,10 +4,8 @@ An arduino-powered, network-controlled traffic-light server
 
 To Do
 ------
-- Add favicon
-- Write content type handler for images
-- Write handler for status.txt
-- Test html directory on SD card, fix 8.3 mappings
+- Prototype circuit with breadboard
+- Purchase traffic lights
 
 References
 ----------
