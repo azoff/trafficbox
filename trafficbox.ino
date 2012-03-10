@@ -16,7 +16,6 @@ const int lightPins[] = { 5, 6, 7 };
 /*************************
  * ERROR LOGGING UTILITY *
  *************************/
- 
 #define error(s) error_P(PSTR(s))
 void error_P(const char* str) {
   PgmPrint("ERROR: ");
@@ -26,8 +25,7 @@ void error_P(const char* str) {
  
 /************************
  * INITIALIZE LIBRARIES *
- ************************/
- 
+ ************************/ 
 void setup() {
    
   Serial.begin(9600);
@@ -49,13 +47,14 @@ void setup() {
   
   server.begin();
   PgmPrintln("HTTP/1.1 via port 80");
+  
+  //SD.ls(LS_R);
      
 }
  
 /*********************
  * MAIN PROGRAM LOOP *
- *********************/
- 
+ *********************/ 
 void loop() {
   char method[10], action[50];
   if (EthernetClient client = server.available()) {
@@ -64,9 +63,14 @@ void loop() {
     Serial.println(action);
     if (strcmp(method, "GET") == 0)
       serveFileStream(action);
-    else
+    if (strcmp(method, "OPTIONS") == 0)
+      serveLightLevels();
+    if (strcmp(method, "POST") == 0) {
+      toggleLight(action);
+      serveLightLevels();
+    } else
       writeStatusLine(400, "Bad Request");
-    delay(1000);
+    delay(1);
     client.stop();    
   }
 }
@@ -74,7 +78,6 @@ void loop() {
 /****************************
  * READS HTTP REQUEST PARTS *
  ****************************/
- 
 void readRequestLine(EthernetClient client, char *method, char *action) {
   int part=0,i=0,j=0; char chunk;
   while (client.connected()) {
@@ -95,35 +98,84 @@ void readRequestLine(EthernetClient client, char *method, char *action) {
 
 /************************************************
  * SERVES A FILE FROM THE SD CARD OVER ETHERNET *
- ************************************************/
- 
-void serveFileStream(char *action) {
-  char *dos83Path = getDos83Path(action);
-  PgmPrint("OPEN "); Serial.println(dos83Path);  
-  File fileStream = SD.open(dos83Path);
+ ************************************************/ 
+void serveFileStream(char *path) {
+  toDos83Path(path);
+  PgmPrint("OPEN "); Serial.println(path);  
+  File fileStream = SD.open(path);
   if(fileStream) {
     writeStatusLine(200, "OK");
-    writeContentType(action);
+    writeContentType(path);
+    writeCacheControl(31556926);
     writeFileStream(fileStream);
   } else {
     writeStatusLine(404, "Not Found");
   }
 }
 
+/*******************************************
+ * READ THE LIGHT LEVELS OF ALL THE LIGHTS *
+ *******************************************/
+void serveLightLevels() {
+  char lights[4], mode;
+  for (int i=0; i<3; i++)
+    lights[i] = digitalRead(lightPins[i]) ? '1' : '0';
+  lights[3] = 0;
+  PgmPrint("LIGHTS ");
+  Serial.println(lights);
+  writeStatusLine(200, "OK");
+  writeContentType("");  
+  writeStringContent(lights);
+}
+
 /************************************************
  * PATH MAPPINGS FROM LONG TO SHORT (8.3) NAMES *
  ************************************************/
-
-char *getDos83Path(char *path) {
-  if (strcmp("/", path) == 0)                                        return "INDEX~1.HTM";
-  if (strcmp("/styles/normalize.css", path) == 0)                    return "STYLES/NORMAL~1.CSS";
-  if (strcmp("/styles/jquery.mobile-1.1.0-rc.1.min.css", path) == 0) return "STYLES/JQUERY~1.CSS";
-  if (strcmp("/styles/screen.css", path) == 0)                       return "STYLES/SCREEN~1.CSS";
-  if (strcmp("/scripts/jquery-1.7.1.min.js", path) == 0)             return "SCRIPTS/JQUERY~1.JS";
-  if (strcmp("/scripts/jquery.mobile-1.1.0-rc.1.min.js", path) == 0) return "SCRIPTS/JQUERY~2.JS";
-  if (strcmp("/scripts/trafficbox.js", path) == 0)                   return "SCRIPTS/TRAFFI~1.JS";
-  if (strcmp("/images/ajax-loader.gif", path) == 0)                  return "IMAGES/AJAX-L~1.GIF";  
-  return "";
+void toDos83Path(char *path) {
+  char ext[4];
+  int length = strlen(path);
+  int i, dot, lower, upper;
+  boolean commandMode = (length > 1) && (path[length-2] == '?');
+  char command = path[length-1];
+  
+  // correct for command mode
+  if (commandMode) {
+    length -= 2;
+    path[length] = '\0';
+  }
+  
+  // handle index command
+  if (length == 1 && command == '/')
+    strncpy(path, "/index.html", length = 11);
+  
+  // find the last dot
+  for (i=0; i<length; i++)
+    if (path[i] == '.') 
+      dot = i;
+  
+  // get bounds
+  lower = dot > 9 ? 9 : dot;
+  upper = length - dot;
+  upper = upper > 4 ? 4 : upper;
+  
+  // save the extension
+  strncpy(ext, path+dot, upper);    
+  
+  // munge if necessary
+  if (commandMode && command == '!') {
+    i = lower;    
+  } else {
+    i = lower > 6 ? 7 : lower;
+    path[i++] = '~';
+    path[i++] = '1';
+  }
+  
+  // add extension after munge
+  strncpy(path+i, ext, upper);
+  
+  // add string terminator
+  path[i+upper] = 0;
+  
 }
 
 /********************
@@ -131,61 +183,65 @@ char *getDos83Path(char *path) {
  ********************/
  
 void writeStatusLine(int code, const char *message) {
-  server.print("HTTP/1.0 ");
+  server.print("HTTP/1.1 ");
   server.print(code);
   server.print(" ");
   server.println(message);
 }
 
+/**********************
+ * HTTP CACHE CONTROL *
+ **********************/
+void writeCacheControl(long maxAge) {
+  server.print("Cache-Control: max-age=");
+  server.println(maxAge);
+}
+
 /*********************
  * HTTP CONTENT TYPE *
  *********************/
-
 void writeContentType(char *path) {
   server.print("Content-Type: ");
-  if (strstr("js", path) != 0)   server.println("application/javascript");
-  if (strstr("json", path) != 0) server.println("application/json");
-  if (strstr("ico", path) != 0)  server.println("image/vnd.microsoft.icon");
-  if (strstr("gif", path) != 0)  server.println("image/gif");
-  if (strstr("css", path) != 0)  server.println("text/css");  
-  if (strstr("txt", path) != 0)  server.println("text/plain");
-  else                           server.println("text/html");
+  if (strstr(path, ".js")  != 0)      server.println("application/javascript");
+  else if (strstr(path, ".ico") != 0) server.println("image/x-icon");
+  else if (strstr(path, ".css") != 0) server.println("text/css");  
+  else if (strstr(path, ".htm") != 0) server.println("text/html");
+  else                                server.println("text/plain");
 }
 
 /*************************
  * STREAM FILE OVER HTTP *
  *************************/
-
 void writeFileStream(File fileStream) { 
   server.print("Content-Length: ");
   server.println(fileStream.available());
   server.println();
   while (fileStream.available())
-    server.write((char)fileStream.read());
+    server.print((char)fileStream.read());
   fileStream.close();
 }
 
-/*
-
-// write out an HTTP content from a string
-void writeContentString(String content) { 
+/*************************
+ * STREAM FILE OVER HTTP *
+ *************************/
+void writeStringContent(char *content) { 
   server.print("Content-Length: ");
-  server.println(content.length());
+  server.println(strlen(content));
   server.println();
   server.println(content);
 }
 
-// toggles a light on and off
-void toggleLight(String command) {
-  int index = command.charAt(1) - '0';
-  int setter = command.charAt(2) - '0';
+/***********************
+ * TOGGLES A LIGHT PIN *
+ ***********************/
+boolean toggleLight(char *command) {
+  int index  = command[1] - '0';
+  int setter = command[2] - '0';
   if (index < 3 && setter >=0) {
     boolean level = setter > 0 ? HIGH : LOW;
     digitalWrite(lightPins[index], level);
-    writeStatusLine(200, "OK");
-    writeContentType(".txt");
-    writeContentString(lightLabels[index] + (level ? " ON" : " OFF"));
+    return true;
   } else {
-    writeStatusLine(400, "Bad Request");
+    return false;
   }
-}*/
+}
