@@ -15,7 +15,7 @@
 
     function sync(status) {
         $.each(status.split(''), function(index, mode){
-            lights.find('[name=' + index + ']:jqmData(role=slider)').val(mode);
+            lights.find('[name=' + index + ']:jqmData(role=slider)').val(mode).slider('refresh');
         });
     }
 

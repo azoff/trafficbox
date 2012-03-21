@@ -11,7 +11,7 @@ byte mac[] = { 0x90, 0xA2, 0xDA, 0x0D, 0x03, 0x6F };
 EthernetServer server(80);
  
 // lights
-const int lightPins[] = { 5, 6, 7 };
+const int lightPins[] = { 7, 6, 5 };
  
 /*************************
  * ERROR LOGGING UTILITY *
