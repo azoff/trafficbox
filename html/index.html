@@ -10,11 +10,11 @@
         <link rel="stylesheet" href="screen.css?!" />
     </head>
     <body>
-        <div data-theme="c" data-role="page">
-        	<div data-role="header">
+        <div id="lights" data-theme="c" data-role="page">
+        	<div data-role="header" data-position="fixed">
         		<h1>TrafficBox Control Panel</h1>
         	</div>
-        	<div id="lights" data-role="content">	
+        	<div id="switches" data-role="content">	
         		<label for="red">Red Light</label>
                 <select name="0" id="red" data-role="slider">
                 	<option value="0">Off</option>
@@ -31,6 +31,47 @@
                 	<option value="1">On</option>
                 </select>                               
         	</div>
+        	<div data-role="footer" data-iconpos="top" data-position="fixed">		
+            	<div data-role="navbar">
+            		<ul>
+            			<li><a data-icon="home">Lights</a></li>
+            			<li><a href="#monitor" data-icon="gear">Monitor</a></li>
+            		</ul>
+            	</div>
+            </div>
+        </div>        
+        <div id="monitor" data-theme="c" data-role="page">
+        	<div data-role="header" data-position="fixed">
+        		<h1>Jenkins Auto-Monitor</h1>
+        		<div class="fieldcontain ui-btn-right">
+            		<select data-theme="c" name="enable" id="enable" data-role="slider">
+                    	<option value="0">Off</option>
+                    	<option value="1">On</option>
+                    </select>
+                </div>
+        	</div>
+        	<div data-role="content">
+                <div data-role="fieldcontain">
+                    <label for="host">Jenkins Host:</label>
+                    <input type="text" name="host" id="host" placeholder="e.g. https://builds.apache.org" />
+                </div>
+                <div data-role="fieldcontain">
+                    <label for="job">Job Name:</label>
+                    <input type="text" name="job" id="job" placeholder="e.g. Lucene-Solr-tests-only-trunk" />
+                </div>
+                <div data-role="fieldcontain">
+                    <label for="interval">Polling Interval:</label>
+                    <input type="number" name="interval" id="interval" value="30000" placeholder="e.g. 30000 (in ms)" />
+                </div>
+            </div>
+        	<div data-role="footer" data-iconpos="top" data-position="fixed">		
+            	<div data-role="navbar">
+            		<ul>
+            			<li><a href="#lights" data-icon="home">Lights</a></li>
+            			<li><a data-icon="gear">Monitor</a></li>
+            		</ul>
+            	</div>
+            </div>
         </div>
         <script src="//code.jquery.com/jquery-latest.min.js"></script>
         <script src="//code.jquery.com/mobile/1.1.0-rc.1/jquery.mobile-1.1.0-rc.1.min.js"></script>

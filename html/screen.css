@@ -1,3 +1,17 @@
-#lights { opacity: 0; }
-#lights.fade.in { opacity: 1; }
+body {
+    background-color: #f0f0f0;
+    background-image: -moz-radial-gradient(50% 50%, circle cover, #f0f0f0, #aaa 100%);
+    background-image: -webkit-radial-gradient(50% 50%, circle cover, #f0f0f0, #aaa 100%);
+    background-image: -o-radial-gradient(50% 50%, circle cover, #f0f0f0, #aaa 100%);
+    background-image: -ms-radial-gradient(50% 50%, circle cover, #f0f0f0, #aaa 100%);
+    background-image: radial-gradient(50% 50%, circle cover, #f0f0f0, #aaa 100%);
+    background-position: center center;
+    background-repeat: no-repeat;
+}
+
+#switches { opacity: 0; }
+#switches.fade.in { opacity: 1; }
+
+#monitor .ui-slider-switch { margin-top: 3px; }
+
 div.ui-slider { margin-bottom: 0.5em !important; }

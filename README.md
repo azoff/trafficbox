@@ -2,10 +2,12 @@ TrafficBox
 ==========
 An arduino-powered, network-controlled traffic-light server
 
+<https://vimeo.com/38900383>
+
 To Do
 ------
-- Prototype circuit with breadboard
 - Purchase traffic lights
+- Solder prototype
 
 References
 ----------
