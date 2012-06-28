@@ -62,7 +62,7 @@ void loop() {
     Serial.print(method); PgmPrint(" ");
     Serial.println(action);
     if (strcmp(method, "GET") == 0)
-      serveFileStream(action);
+      serveIndexFile(action);
     if (strcmp(method, "OPTIONS") == 0)
       serveLightLevels();
     if (strcmp(method, "POST") == 0) {
@@ -99,15 +99,18 @@ void readRequestLine(EthernetClient client, char *method, char *action) {
 /************************************************
  * SERVES A FILE FROM THE SD CARD OVER ETHERNET *
  ************************************************/ 
-void serveFileStream(char *path) {
-  toDos83Path(path);
-  PgmPrint("OPEN "); Serial.println(path);  
-  File fileStream = SD.open(path);
-  if(fileStream) {
-    writeStatusLine(200, "OK");
-    writeContentType(path);
-    writeCacheControl(31556926);
-    writeFileStream(fileStream);
+void serveIndexFile(char *path) {
+  PgmPrint("SERVE INDEX");
+  if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
+      File fileStream = SD.open("INDEX.HTM");
+      if(fileStream) {
+        writeStatusLine(200, "OK");
+        writeContentType(path);
+        writeCacheControl(31556926);
+        writeFileStream(fileStream);
+      } else {
+        writeStatusLine(500, "Internal Server Error");
+      }
   } else {
     writeStatusLine(404, "Not Found");
   }
@@ -126,56 +129,6 @@ void serveLightLevels() {
   writeStatusLine(200, "OK");
   writeContentType("");  
   writeStringContent(lights);
-}
-
-/************************************************
- * PATH MAPPINGS FROM LONG TO SHORT (8.3) NAMES *
- ************************************************/
-void toDos83Path(char *path) {
-  char ext[4];
-  int length = strlen(path);
-  int i, dot, lower, upper;
-  boolean commandMode = (length > 1) && (path[length-2] == '?');
-  char command = path[length-1];
-  
-  // correct for command mode
-  if (commandMode) {
-    length -= 2;
-    path[length] = '\0';
-  }
-  
-  // handle index command
-  if (length == 1 && command == '/')
-    strncpy(path, "/index.html", length = 11);
-  
-  // find the last dot
-  for (i=0; i<length; i++)
-    if (path[i] == '.') 
-      dot = i;
-  
-  // get bounds
-  lower = dot > 9 ? 9 : dot;
-  upper = length - dot;
-  upper = upper > 4 ? 4 : upper;
-  
-  // save the extension
-  strncpy(ext, path+dot, upper);    
-  
-  // munge if necessary
-  if (commandMode && command == '!') {
-    i = lower;    
-  } else {
-    i = lower > 6 ? 7 : lower;
-    path[i++] = '~';
-    path[i++] = '1';
-  }
-  
-  // add extension after munge
-  strncpy(path+i, ext, upper);
-  
-  // add string terminator
-  path[i+upper] = 0;
-  
 }
 
 /********************
