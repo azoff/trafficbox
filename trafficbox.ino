@@ -102,10 +102,10 @@ void readRequestLine(EthernetClient client, char *method, char *action) {
 void serveIndexFile(char *path) {
   PgmPrint("SERVE INDEX");
   if (strcmp(path, "/") == 0 || strcmp(path, "/index.html") == 0) {
-      File fileStream = SD.open("INDEX.HTM");
+      File fileStream = SD.open("index~1.htm");
       if(fileStream) {
         writeStatusLine(200, "OK");
-        writeContentType(path);
+        writeContentType(".htm");
         writeCacheControl(31556926);
         writeFileStream(fileStream);
       } else {
