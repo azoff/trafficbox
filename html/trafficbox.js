@@ -71,7 +71,7 @@
                     (monitor.pending === true || monitor.pending === undefined)) {
                     monitor.pending = false;
                     buildReset();
-                    if (data.lastBuild.number === data.lastSuccessfulBuild.number) {
+                    if (data.lastSuccessfulBuild && data.lastBuild.number === data.lastSuccessfulBuild.number) {
                         buildSuccess();
                     } else {
                         buildFailure();
